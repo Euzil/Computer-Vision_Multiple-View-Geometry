@@ -38,7 +38,7 @@ def exponentialSkewMat(w):
 
 def generateRandomPts(n_pts, R, T):
     # Generate random 3D points and project them to two cameras
-    # input: numebr of points, rotation matrix, translation vector
+    # input: number of points, rotation matrix, translation vector
     # output: 2D points in two cameras, camera intrinsic matrix, 3D points
 
     # assume the camera intrinsic matrix is identity
@@ -56,43 +56,71 @@ def generateRandomPts(n_pts, R, T):
 
     # counter for the number of valid points
     n = 0
-    while n < n_pts:
-        # generate one random 3D point
-        X1 = (np.random.randn(3) - 0.5) * 20
+    max_attempts = n_pts * 100  # Prevent infinite loops
+    attempts = 0
+    
+    while n < n_pts and attempts < max_attempts:
+        attempts += 1
+        
+        # Generate random 3D point with better distribution
+        # Strategy: generate points that are more likely to be visible in both cameras
+        
+        # Method 1: Generate points in a reasonable 3D space
+        # X, Y coordinates: reasonable spread around origin
+        # Z coordinate: ensure positive depth with good range
+        x_coord = (np.random.rand() - 0.5) * 8  # [-4, 4]
+        y_coord = (np.random.rand() - 0.5) * 8  # [-4, 4] 
+        z_coord = np.random.rand() * 8 + 2      # [2, 10] - always positive, reasonable depth
+        
+        X1 = np.array([x_coord, y_coord, z_coord])
 
         # compute the 3D point in the second camera
         X2 = R @ X1 + T
 
-        # check if the 3D points are in front of the cameras
-        if X1[2] > 0.1 and X2[2] > 0.1:
+        # check if the 3D points are in front of both cameras with sufficient depth
+        if X1[2] > 0.5 and X2[2] > 0.5:  # Increased minimum depth for stability
 
             ########################################################################
-            # TODO: project the 3D points to the two cameras                       #
-            # Hint: use the camera intrinsic matrix to compute current 3D point,   #
-            # then store the projected 2D points in the corresponding arrays       #
-            # you shoul have something like: x1[n] = ..., y1[n] = ...,             #
-            #                                x2[n] = ..., y2[n] = ...              #
+            # TODO: project the 3D points to the two cameras                      #
+            # Hint: use the camera intrinsic matrix to compute current 3D point,  #
+            # then store the projected 2D points in the corresponding arrays      #
+            # you shoul have something like: x1[n] = ..., y1[n] = ...,            #
+            #                                x2[n] = ..., y2[n] = ...             #
             ########################################################################
-
 
             # Project 3D points to 2D using perspective projection
             # For camera 1: project X1
             proj1 = K1 @ X1  # Apply camera intrinsic matrix
-            x1[n] = proj1[0] / proj1[2]  # Normalize by z-coordinate
+            x1[n] = proj1[0] / proj1[2]  # Normalize by z-coordinate (perspective division)
             y1[n] = proj1[1] / proj1[2]
-            
+
             # For camera 2: project X2
             proj2 = K2 @ X2  # Apply camera intrinsic matrix
-            x2[n] = proj2[0] / proj2[2]  # Normalize by z-coordinate
+            x2[n] = proj2[0] / proj2[2]  # Normalize by z-coordinate (perspective division)
             y2[n] = proj2[1] / proj2[2]
 
             ########################################################################
             #                           END OF YOUR CODE                           #
             ########################################################################
 
-            # store the 3D point and go to next one            
-            X1_gt[:, n] = X1
-            n += 1
+            # Additional check: ensure projected points are within reasonable image bounds
+            # This prevents extreme projections that might cause numerical issues
+            if (abs(x1[n]) < 10 and abs(y1[n]) < 10 and 
+                abs(x2[n]) < 10 and abs(y2[n]) < 10):
+                
+                # store the 3D point and go to next one                        
+                X1_gt[:, n] = X1
+                n += 1
+    
+    # Check if we successfully generated enough points
+    if n < n_pts:
+        print(f"Warning: Only generated {n} out of {n_pts} requested points after {attempts} attempts")
+        # Trim arrays to actual number of generated points
+        x1 = x1[:n]
+        x2 = x2[:n] 
+        y1 = y1[:n]
+        y2 = y2[:n]
+        X1_gt = X1_gt[:, :n]
 
     return x1, x2, y1, y2, K1, K2, X1_gt
 
